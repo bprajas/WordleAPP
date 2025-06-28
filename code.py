@@ -4,6 +4,7 @@ import requests
 import numpy as np
 import pandas as pd
 
+# ---------------------- Load Wordle Data ---------------------- #
 @st.cache_data
 
 def load_wordle_data():
@@ -16,6 +17,7 @@ def load_wordle_data():
     wordle_answers = sorted(wordle_answers)
     return wordle_answers, valid_entries
 
+# ---------------------- Utility Functions ---------------------- #
 def indices(arr, value):
     return [ind for ind, x in enumerate(arr) if x == value]
 
@@ -64,15 +66,38 @@ def entropy_df(input_words, possible_answers):
     df = df.sort_values("ENTROPY", ascending=False).set_index("WORD")
     return df
 
-# Streamlit UI
-st.title("Wordle Entropy Maximizer")
+# ---------------------- Streamlit App ---------------------- #
+st.set_page_config(page_title="Wordle Helper", layout="centered")
+
+st.markdown("""
+    <style>
+    .main {
+        background-color: #f9f9f9;
+    }
+    .block-container {
+        padding-top: 2rem;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+st.title("🧠 Wordle Entropy Maximizer")
+st.write("This tool helps you choose the best next guess based on information theory.")
 
 wordle_answers, valid_words = load_wordle_data()
 
-st.markdown("Enter your previous guesses and their results in the format:")
-st.code("CRANE:GYWGW, SLATE:WWGGW")
+st.markdown("""
+### How to use:
+Enter your guesses and their feedback in the format:
+- `CRANE:GYWGW`
+- `SLATE:WWGGW`
+Separate multiple entries with commas.
 
-user_input = st.text_input("Input your guesses and feedback", "")
+🟩 = Correct position  
+🟨 = Present but wrong position  
+⬜ = Not in word
+""")
+
+user_input = st.text_area("Enter guesses and patterns:", placeholder="CRANE:GYWGW, SLATE:WWGGW")
 
 if user_input:
     try:
@@ -84,7 +109,10 @@ if user_input:
             current_list = get_words_using_sequence(guess, pattern, current_list)
 
         df_entropy = entropy_df(current_list, wordle_answers)
-        st.subheader("Top 15 Words by Entropy")
-        st.dataframe(df_entropy.head(15))
+        st.success(f"Found {len(current_list)} remaining possible words.")
+        st.subheader("🔝 Top 15 Suggestions")
+        st.dataframe(df_entropy.head(15), use_container_width=True)
     except Exception as e:
-        st.error(f"There was an error parsing your input: {e}")
+        st.error(f"Error: {e}")
+else:
+    st.info("Enter a guess-pattern input to get suggestions.")
