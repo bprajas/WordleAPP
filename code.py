@@ -69,26 +69,22 @@ st.title("Wordle Entropy Maximizer")
 
 wordle_answers, valid_words = load_wordle_data()
 
-cols = st.columns(4)
-input_words = []
-patterns = []
+st.markdown("Enter your previous guesses and their results in the format:")
+st.code("CRANE:GYWGW, SLATE:WWGGW")
 
-with st.form("wordle_form"):
-    for i in range(4):
-        with cols[i]:
-            word = st.text_input(f"Guess {i+1}", "", max_chars=5).upper()
-            pattern = st.text_input(f"Pattern {i+1} (G/Y/W)", "", max_chars=5).upper()
-            if word and pattern:
-                pattern = pattern.replace("G", "🟩").replace("Y", "🟨").replace("W", "⬜")
-                input_words.append(word)
-                patterns.append(pattern)
-    submitted = st.form_submit_button("Calculate Best Next Guesses")
+user_input = st.text_input("Input your guesses and feedback", "")
 
-if submitted:
-    current_list = wordle_answers
-    for word, pat in zip(input_words, patterns):
-        current_list = get_words_using_sequence(word, pat, current_list)
+if user_input:
+    try:
+        current_list = wordle_answers
+        guess_pattern_pairs = [pair.strip().split(":") for pair in user_input.split(",") if ":" in pair]
+        for guess, pattern in guess_pattern_pairs:
+            guess = guess.strip().upper()
+            pattern = pattern.strip().upper().replace("G", "🟩").replace("Y", "🟨").replace("W", "⬜")
+            current_list = get_words_using_sequence(guess, pattern, current_list)
 
-    df_entropy = entropy_df(current_list, wordle_answers)
-    st.subheader("Top 15 Words by Entropy")
-    st.dataframe(df_entropy.head(15))
+        df_entropy = entropy_df(current_list, wordle_answers)
+        st.subheader("Top 15 Words by Entropy")
+        st.dataframe(df_entropy.head(15))
+    except Exception as e:
+        st.error(f"There was an error parsing your input: {e}")
