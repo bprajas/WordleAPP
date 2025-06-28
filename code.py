@@ -80,7 +80,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🧠 Wordle Entropy Maximizer")
+st.title("🧠 ENTROPY MAXIMISED WORDLE SOLVER")
 st.write("This tool helps you choose the best next guess based on information theory.")
 
 wordle_answers, valid_words = load_wordle_data()
