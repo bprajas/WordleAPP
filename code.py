@@ -1,69 +1,66 @@
 import streamlit as st
 import itertools
-import requests
 import numpy as np
 import pandas as pd
 
-@st.cache_data
+# ---------------------------- DATA LOADER ---------------------------- #
 
+@st.cache_data
 def load_wordle_data():
-    url = "https://web.archive.org/web/20220101000805js_/https://www.powerlanguage.co.uk/wordle/main.db1931a8.js"
-    response = requests.get(url)
-    data = response.text
+    with open("wordle_data.js", "r") as f:
+        data = f.read()
+
     wordle_answers = data.split("var Aa=[")[-1].split("]")[0].replace('"', "").upper().split(",")
     valid_entries = data.split(",La=[")[-1].split("]")[0].replace('"', "").upper().split(",")
-    valid_entries = sorted(list(set(wordle_answers + valid_entries)))
-    wordle_answers = sorted(wordle_answers)
-    return wordle_answers, valid_entries
+    full_word_list = sorted(list(set(wordle_answers + valid_entries)))
+    return sorted(wordle_answers), full_word_list
+
+# ---------------------------- WORDLE ENGINE ---------------------------- #
+
 def indices(arr, value):
-    return [ind for ind, x in enumerate(arr) if x == value]
+    return [i for i, x in enumerate(arr) if x == value]
 
 def color_sequence(guess, answer, emoji=True):
-    guess = list(guess)
-    answer = list(answer)
-    colors = ["W"] * len(answer)
-    for ind, (g, a) in enumerate(zip(guess, answer)):
-        if g == a:
-            colors[ind] = "G"
-            guess[ind] = ""
-            answer[ind] = ""
-    for ind, (g, a) in enumerate(zip(guess, answer)):
-        if g != a and g in answer and g != "":
-            g_indices = indices(guess, g)
-            a_indices = indices(answer, g)
-            if not any(i in g_indices for i in a_indices):
-                colors[ind] = "Y"
-                answer[answer.index(g)] = ""
-    colors = "".join(colors)
-    if emoji:
-        colors = colors.replace("G", "🟩").replace("Y", "🟨").replace("W", "⬜")
-    return colors
+    guess, answer = list(guess), list(answer)
+    result = ["W"] * len(answer)
 
-def get_words_using_sequence(input_word, sequence, word_list):
-    return [word for word in word_list if color_sequence(input_word, word) == sequence]
+    for i in range(len(answer)):
+        if guess[i] == answer[i]:
+            result[i] = "G"
+            guess[i] = answer[i] = ""
 
-def count_of_combos(guess, answers, probability=True):
+    for i in range(len(answer)):
+        if guess[i] and guess[i] in answer:
+            result[i] = "Y"
+            answer[answer.index(guess[i])] = ""
+
+    code = "".join(result)
+    return code.replace("G", "🟩").replace("Y", "🟨").replace("W", "⬜") if emoji else code
+
+def get_words_using_sequence(guess, sequence, words):
+    return [word for word in words if color_sequence(guess, word) == sequence]
+
+def count_combos(guess, answers):
     results = {}
-    increment = 1 / len(answers) if probability else 1
     for ans in answers:
         seq = color_sequence(guess, ans)
-        results[seq] = results.get(seq, 0) + increment
+        results[seq] = results.get(seq, 0) + 1 / len(answers)
     return results
 
-def entropy_from_combos(combos):
+def entropy(combos):
     return sum(p * (-np.log2(p)) for p in combos.values())
 
-def entropy_df(input_words, possible_answers):
+def entropy_df(possible_guesses, possible_answers):
     data = []
-    for word in input_words:
-        combos = count_of_combos(word, possible_answers)
-        entropy = entropy_from_combos(combos)
-        data.append((word, entropy))
-    df = pd.DataFrame(data, columns=["WORD", "ENTROPY"])
-    df = df.sort_values("ENTROPY", ascending=False).set_index("WORD")
-    return df
+    for word in possible_guesses:
+        combos = count_combos(word, possible_answers)
+        e = entropy(combos)
+        data.append((word, e))
+    df = pd.DataFrame(data, columns=["WORD", "ENTROPY"]).sort_values("ENTROPY", ascending=False)
+    return df.set_index("WORD")
 
-# ---------------------- Streamlit App ---------------------- #
+# ---------------------------- STREAMLIT APP ---------------------------- #
+
 st.set_page_config(page_title="Wordle Helper", layout="centered")
 
 st.markdown("""
@@ -93,46 +90,39 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🧠 ENTROPY MAXIMISED WORDLE SOLVER")
-st.write("This tool helps you choose the best next guess based on information theory.")
+st.write("This tool recommends the most informative next guess based on Wordle feedback.")
 
-wordle_answers, valid_words = load_wordle_data()
+answers, all_words = load_wordle_data()
 
-with st.expander("📘 How to use (Tap to Expand)", expanded=True):
+with st.expander("📘 How to Use (Tap to Expand)", expanded=True):
     st.markdown("""
-    Enter your guesses and feedback as:
-    - `CRANE:GYWGW`
-    - `SLATE:WWGGW`
-
-    Where:
-    - 🟩 = Correct position (`G`)
-    - 🟨 = Wrong position (`Y`)
-    - ⬜ = Not in word (`W`)
-
-    Separate guesses with commas.
+    Enter previous guesses with feedback as:
+    ```
+    CRANE:GYWGW, SLATE:WWGGW
+    ```
+    - G = 🟩 Green = Correct letter & position  
+    - Y = 🟨 Yellow = Correct letter, wrong position  
+    - W = ⬜ White = Letter not in word
     """)
 
-user_input = st.text_area(
-    "✍️ Enter guesses and feedback:",
-    placeholder="CRANE:GYWGW, SLATE:WWGGW",
-    height=150
-)
+user_input = st.text_area("✍️ Enter guesses and feedback:", height=140, placeholder="CRANE:GYWGW, SLATE:WWGGW")
 
 if user_input:
     try:
-        current_list = wordle_answers
-        guess_pattern_pairs = [
-            pair.strip().split(":") for pair in user_input.split(",") if ":" in pair
-        ]
-        for guess, pattern in guess_pattern_pairs:
+        filtered_words = answers.copy()
+        entries = [pair.strip().split(":") for pair in user_input.split(",") if ":" in pair]
+
+        for guess, pattern in entries:
             guess = guess.strip().upper()
             pattern = pattern.strip().upper().replace("G", "🟩").replace("Y", "🟨").replace("W", "⬜")
-            current_list = get_words_using_sequence(guess, pattern, current_list)
+            filtered_words = get_words_using_sequence(guess, pattern, filtered_words)
 
-        df_entropy = entropy_df(current_list, wordle_answers)
-        st.success(f"✅ {len(current_list)} words remaining.")
-        st.subheader("🔝 Top 15 Suggestions")
-        st.dataframe(df_entropy.head(15), use_container_width=True)
+        df = entropy_df(all_words, filtered_words)
+        st.success(f"✅ {len(filtered_words)} possible words remaining.")
+        st.subheader("🔝 Top 15 Next Guesses")
+        st.dataframe(df.head(15), use_container_width=True)
+
     except Exception as e:
-        st.error(f"⚠️ Error: {e}")
+        st.error(f"⚠️ Something went wrong: {e}")
 else:
-    st.info("Enter guesses above to generate suggestions.")
+    st.info("Input guesses above to get recommendations.")
