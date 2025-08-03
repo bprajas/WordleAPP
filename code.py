@@ -4,7 +4,6 @@ import requests
 import numpy as np
 import pandas as pd
 
-# ---------------------- Load Wordle Data ---------------------- #
 @st.cache_data
 
 def load_wordle_data():
@@ -16,8 +15,6 @@ def load_wordle_data():
     valid_entries = sorted(list(set(wordle_answers + valid_entries)))
     wordle_answers = sorted(wordle_answers)
     return wordle_answers, valid_entries
-
-# ---------------------- Utility Functions ---------------------- #
 def indices(arr, value):
     return [ind for ind, x in enumerate(arr) if x == value]
 
@@ -71,11 +68,26 @@ st.set_page_config(page_title="Wordle Helper", layout="centered")
 
 st.markdown("""
     <style>
+    html, body, [class*="css"] {
+        font-family: 'Segoe UI', sans-serif;
+        font-size: 16px;
+    }
     .main {
         background-color: #f9f9f9;
     }
     .block-container {
         padding-top: 2rem;
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+    @media (max-width: 600px) {
+        .block-container {
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+        }
+    }
+    textarea {
+        font-family: monospace;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -85,34 +97,42 @@ st.write("This tool helps you choose the best next guess based on information th
 
 wordle_answers, valid_words = load_wordle_data()
 
-st.markdown("""
-### How to use:
-Enter your guesses and their feedback in the format:
-- `CRANE:GYWGW`
-- `SLATE:WWGGW`
-Separate multiple entries with commas.
+with st.expander("📘 How to use (Tap to Expand)", expanded=True):
+    st.markdown("""
+    Enter your guesses and feedback as:
+    - `CRANE:GYWGW`
+    - `SLATE:WWGGW`
 
-🟩 = Correct position  
-🟨 = Present but wrong position  
-⬜ = Not in word
-""")
+    Where:
+    - 🟩 = Correct position (`G`)
+    - 🟨 = Wrong position (`Y`)
+    - ⬜ = Not in word (`W`)
 
-user_input = st.text_area("Enter guesses and patterns:", placeholder="CRANE:GYWGW, SLATE:WWGGW")
+    Separate guesses with commas.
+    """)
+
+user_input = st.text_area(
+    "✍️ Enter guesses and feedback:",
+    placeholder="CRANE:GYWGW, SLATE:WWGGW",
+    height=150
+)
 
 if user_input:
     try:
         current_list = wordle_answers
-        guess_pattern_pairs = [pair.strip().split(":") for pair in user_input.split(",") if ":" in pair]
+        guess_pattern_pairs = [
+            pair.strip().split(":") for pair in user_input.split(",") if ":" in pair
+        ]
         for guess, pattern in guess_pattern_pairs:
             guess = guess.strip().upper()
             pattern = pattern.strip().upper().replace("G", "🟩").replace("Y", "🟨").replace("W", "⬜")
             current_list = get_words_using_sequence(guess, pattern, current_list)
 
         df_entropy = entropy_df(current_list, wordle_answers)
-        st.success(f"Found {len(current_list)} remaining possible words.")
+        st.success(f"✅ {len(current_list)} words remaining.")
         st.subheader("🔝 Top 15 Suggestions")
         st.dataframe(df_entropy.head(15), use_container_width=True)
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"⚠️ Error: {e}")
 else:
-    st.info("Enter a guess-pattern input to get suggestions.")
+    st.info("Enter guesses above to generate suggestions.")
